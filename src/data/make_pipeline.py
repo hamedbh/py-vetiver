@@ -3,7 +3,7 @@ from dotenv import find_dotenv, load_dotenv
 import pandas as pd
 from sklearn.pipeline import Pipeline
 from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 from joblib import dump
 
@@ -20,16 +20,24 @@ def main(input_path, pipeline_path):
     
     # Drop any rows with missing values
     df = df.dropna()
+    df["deposit"] = df["deposit"].map({"yes": 1, "no": 0})
 
     # Split the data into training and validation sets
     df_train, _ = train_test_split(df, test_size=0.2, random_state=1)
 
     # Define the preprocessor for categorical variables
-    categorical_cols = ["job", "marital", "education", "default", "housing", "loan", "contact", "day", "month", "poutcome"]
-    preprocessor = ColumnTransformer([
-        ("cat", OneHotEncoder(sparse_output=False, handle_unknown="ignore"), categorical_cols),
-        ("nothing", "passthrough", df.columns.difference(categorical_cols).tolist())
-        ])
+    cat_preds = ["job", "marital", "education", "default", "housing", 
+                        "loan", "contact", "day", "month", "poutcome"]
+    num_preds = ["age", "balance", "duration", "campaign", "pdays", 
+                          "previous"]
+    assert len(cat_preds) + len(num_preds) == 16, "Total number of predictors must equal 16"
+    preprocessor = ColumnTransformer(
+        transformers=[
+            ("num", StandardScaler(), num_preds),
+            ("cat", OneHotEncoder(sparse_output=False, handle_unknown="ignore"), cat_preds)
+        ],
+        remainder="passthrough"
+    )
     
     # Create the pipeline combining preprocessing and model training
     pipeline = Pipeline([("preprocessor", preprocessor)])
@@ -43,4 +51,3 @@ if __name__ == '__main__':
     load_dotenv(find_dotenv())
 
     main()
-
