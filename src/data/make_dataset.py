@@ -18,6 +18,7 @@ def main(pipeline_path, input_data_path, data_path, partition):
 
     pipeline = load(pipeline_path)
     df = pd.read_csv(input_data_path)
+    df["deposit"] = df["deposit"].map({"yes": 1, "no": 0})
 
     df_train, df_val = train_test_split(df, test_size=0.2, random_state=1)
 
@@ -27,8 +28,8 @@ def main(pipeline_path, input_data_path, data_path, partition):
     elif (partition == "val"):
         d = df_val
     
-    d_trans = pipeline.transform(d)
-    np.save(data_path, d_trans)
+    d_trans = pipeline.transform(d).astype(np.float32)
+    np.save(data_path, d_trans, allow_pickle=True)
 
 if __name__ == '__main__':
     # find .env automagically by walking up directories until it's found, then
