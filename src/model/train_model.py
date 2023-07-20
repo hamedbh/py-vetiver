@@ -69,8 +69,6 @@ def main(dtrain_path, dval_path, model_path):
     learning_rate = 0.001
     loss_fn = nn.BCELoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    # criterion = nn.BCELoss()
-    # optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     # Training loop from the book
     best_val_loss = float('inf')
