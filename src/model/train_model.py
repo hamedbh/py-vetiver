@@ -2,9 +2,8 @@ import click
 from dotenv import find_dotenv, load_dotenv
 import numpy as np
 import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
+from torch import nn
+from torch.utils.data import DataLoader, Dataset
 
 class BankDataset(Dataset):
     def __init__(self, data):
@@ -23,15 +22,48 @@ class BankDataset(Dataset):
 class Model(nn.Module):
     def __init__(self, input_size):
         super().__init__()
-        self.layer1 = nn.Linear(input_size, 16)
-        self.layer2 = nn.Linear(16, 1)
-
+        self.linear_stack = nn.Sequential(
+            nn.Linear(input_size, 16),
+            nn.ReLU(),
+            nn.Linear(16, 1),
+            nn.Sigmoid()
+        )
+    
     def forward(self, x):
-        x = self.layer1(x)
-        x = nn.Sigmoid()(x)
-        x = self.layer2(x)
-        x = nn.Sigmoid()(x)
+        x = self.linear_stack(x)
         return x
+
+def train(dataloader, model, loss_fn, optimizer, device):
+    model.train()
+    train_loss = 0.0
+
+    for X, y in dataloader:
+        X, y = X.to(device), y.to(device)
+
+        # Compute prediction error
+        pred = model(X)
+        loss = loss_fn(pred, y)
+
+        # Backpropagation
+        loss.backward()
+        optimizer.step()
+        optimizer.zero_grad()
+        train_loss += loss.item() * y.size(0)
+    
+    train_loss /= len(dataloader.dataset)
+    return train_loss
+
+
+def val(dataloader, model, loss_fn, device):
+    model.eval()
+    val_loss = 0.0
+    with torch.no_grad():
+        for X, y in dataloader:
+            X, y = X.to(device), y.to(device)
+            pred = model(X)
+            val_loss += loss_fn(pred, y).item() * y.size(0)
+    val_loss /= len(dataloader.dataset)
+    return val_loss
 
 @click.command()
 @click.argument('dtrain_path', type=click.Path(exists=True))
@@ -56,57 +88,44 @@ def main(dtrain_path, dval_path, model_path):
     dval = BankDataset(np.load(dval_path, allow_pickle=True))
 
     # Create DataLoader for training and validation datasets
-    batch_size = 32
+    batch_size = 64
     torch.manual_seed(1)
     train_loader = DataLoader(dtrain, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(dval, batch_size=batch_size)
 
     # Initialize the model
     input_size = dtrain.features.shape[1]
-    model = Model(input_size)
+    # Get cpu, gpu or mps device for training.
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps"
+        if torch.backends.mps.is_available()
+        else "cpu"
+    )
+    print(f"Using {device} device")
+    model = Model(input_size).to(device)
 
     # Define the loss function and optimizer
     learning_rate = 0.001
     loss_fn = nn.BCELoss()
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     # Training loop from the book
     best_val_loss = float('inf')
-    num_epochs = 200
+    epochs = 200
     log_epochs = 10
-    train_loss = [0] * num_epochs
-    val_loss = [0] * num_epochs
-
-    for epoch in range(num_epochs):
-        model.train()
-        for x_batch, y_batch in train_loader:
-            pred = model(x_batch)
-            loss = loss_fn(pred, y_batch)
-            loss.backward()
-            optimizer.step()
-            optimizer.zero_grad()
-            train_loss[epoch] += loss.item()*y_batch.size(0)
-        train_loss[epoch] /= len(train_loader.dataset)
-
-        # Validation
-        model.eval()
-        with torch.no_grad():
-            for x_batch, y_batch in val_loader:
-                pred = model(x_batch)
-                loss = loss_fn(pred, y_batch)
-                val_loss[epoch] +=  loss.item()*y_batch.size(0)
-        # Calculate average validation loss for the epoch
-        val_loss[epoch] /= len(val_loader.dataset)
-
+    for t in range(epochs):
+        train_loss = train(train_loader, model, loss_fn, optimizer, device)
+        val_loss = val(val_loader, model, loss_fn, device)
+        if (t + 1) % log_epochs == 0:
+            print(f"Epoch {t+1}\n-------------------------------")
+            print(f"Train loss: {train_loss:.5f}\n" + 
+                  f"Validation loss: {val_loss:.5f}")
         # Save model if it's the best performing
-        if val_loss[epoch] < best_val_loss:
-            best_val_loss = val_loss[epoch]
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
             torch.save(model, model_path)
-        
-        # Print training and validation loss after every `log_epochs`
-        if epoch % log_epochs == 0:
-            print(f"Epoch {epoch}: train loss {train_loss[epoch]:.3f} " + 
-                  f"validation loss {val_loss[epoch]:.3f}")
     
 if __name__ == '__main__':
     # find .env automagically by walking up directories until it's found, then
