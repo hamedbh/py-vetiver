@@ -5,6 +5,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
+
 class BankDataset(Dataset):
     def __init__(self, data):
         self.all = torch.as_tensor(data)
@@ -19,6 +20,7 @@ class BankDataset(Dataset):
         y = self.target[idx]
         return x, y
 
+
 class Model(nn.Module):
     def __init__(self, input_size):
         super().__init__()
@@ -28,10 +30,11 @@ class Model(nn.Module):
             nn.Linear(16, 1),
             nn.Sigmoid()
         )
-    
+
     def forward(self, x):
         x = self.linear_stack(x)
         return x
+
 
 def train(dataloader, model, loss_fn, optimizer, device):
     model.train()
@@ -49,7 +52,7 @@ def train(dataloader, model, loss_fn, optimizer, device):
         optimizer.step()
         optimizer.zero_grad()
         train_loss += loss.item() * y.size(0)
-    
+
     train_loss /= len(dataloader.dataset)
     return train_loss
 
@@ -65,20 +68,20 @@ def val(dataloader, model, loss_fn, device):
     val_loss /= len(dataloader.dataset)
     return val_loss
 
+
 @click.command()
 @click.argument('dtrain_path', type=click.Path(exists=True))
 @click.argument('dval_path', type=click.Path(exists=True))
 @click.argument('model_path', type=click.Path())
-
 def main(dtrain_path, dval_path, model_path):
     """
-    Train a PyTorch model using the training data and validation data that were 
+    Train a PyTorch model using the training data and validation data that were
     already processed earlier. These are saved to dtrain_path and dval_path as
-    numpy arrays, where the rightmost column is the outcome variable. The 
+    numpy arrays, where the rightmost column is the outcome variable. The
     outcome variable is a binary variable.
 
-    The PyTorch model has one hidden layer with 16 nodes. During training the 
-    model performance is evaluated using the validation data, based on 
+    The PyTorch model has one hidden layer with 16 nodes. During training the
+    model performance is evaluated using the validation data, based on
     the log-loss metric.
 
     The function writes out the best-performing model out to disk.
@@ -120,13 +123,14 @@ def main(dtrain_path, dval_path, model_path):
         val_loss = val(val_loader, model, loss_fn, device)
         if (t + 1) % log_epochs == 0:
             print(f"Epoch {t+1}\n-------------------------------")
-            print(f"Train loss: {train_loss:.5f}\n" + 
+            print(f"Train loss: {train_loss:.5f}\n" +
                   f"Validation loss: {val_loss:.5f}")
         # Save model if it's the best performing
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             torch.save(model, model_path)
-    
+
+
 if __name__ == '__main__':
     # find .env automagically by walking up directories until it's found, then
     # load up the .env entries as environment variables
